@@ -1,13 +1,3 @@
-// #define DEBUG
-
-#ifdef DEBUG
-#define DEBUG_PRINT(x) Serial1.print(x)
-#define DEBUG_PRINTLN(x) Serial1.println(x)
-#else
-#define DEBUG_PRINT(x)
-#define DEBUG_PRINTLN(x)
-#endif
-
 #include <TMC2209.h>
 #include <AccelStepper.h>
 #include <Arduino.h>
@@ -82,18 +72,15 @@ bool PumpeFehler = false;
 ISR(PCINT0_vect) {
   // Wenn die Bremse von 0 auf 12 V wechselt
   if (digitalRead(IO_Bremse) && ZustandBremse == false) {
-    DEBUG_PRINTLN(F("Bremse betätigt"));
     ZustandBremse = true;
     ZustandBearbeitet = false;
   } else if (!digitalRead(IO_Bremse) && ZustandBremse == true) {
-    DEBUG_PRINTLN(F("Bremse gelöst"));
     ZustandBremse = false;
     ZustandBearbeitet = false;
   }
 
   // Wenn die Handbremse von 0 auf 12 V wechselt
   if (!digitalRead(IO_Handbremse) && ZustandHandbremse == false) {
-    DEBUG_PRINTLN(F("Handbremse betätigt"));
     ZustandHandbremse = true;
     ZustandBearbeitet = false;
   } else if (digitalRead(IO_Handbremse) && ZustandHandbremse == true) {
@@ -103,22 +90,15 @@ ISR(PCINT0_vect) {
 
   // Wenn der Hauptschalter von 12 auf 0 V wechselt
   if (!digitalRead(IO_Hauptschalter) && ZustandHauptschalter == false) {
-    DEBUG_PRINTLN(F("Hauptschalter aus"));
     ZustandHauptschalter = true;
     ZustandBearbeitet = false;
   } else if (digitalRead(IO_Hauptschalter) && ZustandHauptschalter == true) {
-    DEBUG_PRINTLN(F("Hauptschalter an"));
     ZustandHauptschalter = false;
     ZustandBearbeitet = false;
   }
 }
 
 void setup() {
-  // Erzeuge Seriellen Port nur, wenn Debug-Flag geesetzt ist
-  // Serial1.begin(115200);
-
-  DEBUG_PRINTLN(F("Programm startet"));
-
   // Willkommensbotschaft
   u8g2.begin();
   u8g2.setFont(u8g2_font_helvR08_tf);
@@ -178,23 +158,19 @@ void setup() {
   stepper_driver.enable();
 
   delay(250);
-  LeseTMCStatus();
+  LeseTMCStatus(true);
   delay(250);
 
   // Prüfe, ob AutoTune durchgeführt werden soll
   if (EEPROM.read(0) != 123) {
-    DEBUG_PRINTLN(F("Haldex Autotuning..."));
     // Lasse Stepper 400 Steps in Positive Richtung laufen und erwarte Rückgabewert
     SchrittzahlMaximum = autoHome(400);
-    DEBUG_PRINTLN(SchrittzahlMaximum);
 
     // Wenn der Rückgabewert kleiner als 50 Steps ist, scheint die Drehrichtung falsch zu sein
     if (SchrittzahlMaximum < 50) {
       // Lasse den Stepper nun also 400 Steps in negative Richtung laufen
       SchrittzahlMaximum = autoHome(-400);
     }
-    DEBUG_PRINT(SchrittzahlMaximum);
-    DEBUG_PRINTLN(F(" steps Maximalweg ermittelt"));
     if (SchrittzahlMaximum < -50) {
       Schrittzahl0Prozent = -100;
       Schrittzahl100Prozent = SchrittzahlMaximum + 40;
@@ -209,8 +185,6 @@ void setup() {
       Schrittzahl75Prozent = (Schrittzahl100Prozent - Schrittzahl50Prozent) / 2 + Schrittzahl50Prozent;
       Schrittzahl25Prozent = (Schrittzahl50Prozent - Schrittzahl0Prozent) / 2 + Schrittzahl0Prozent;
       EEPROM.write(0, 123);
-    } else {
-      DEBUG_PRINTLN(F("Schrittzahlen zu gering, Fehler im Ventil"));
     }
     eepromWriteInt(2, Schrittzahl0Prozent);
     eepromWriteInt(4, Schrittzahl25Prozent);
@@ -227,18 +201,6 @@ void setup() {
     Schrittzahl100Prozent = eepromReadInt(10);
     SchrittzahlMaximum = eepromReadInt(12);
   }
-
-  DEBUG_PRINTLN(F("Ermittelte Zwischwerte nach Autotuning:"));
-  DEBUG_PRINT(F("0%: "));
-  DEBUG_PRINTLN(Schrittzahl0Prozent);
-  DEBUG_PRINT(F("25%: "));
-  DEBUG_PRINTLN(Schrittzahl25Prozent);
-  DEBUG_PRINT(F("50%: "));
-  DEBUG_PRINTLN(Schrittzahl50Prozent);
-  DEBUG_PRINT(F("75%: "));
-  DEBUG_PRINTLN(Schrittzahl75Prozent);
-  DEBUG_PRINT(F("100%: "));
-  DEBUG_PRINTLN(Schrittzahl100Prozent);
 
   digitalWrite(IO_Enable, HIGH);
   stepper.setCurrentPosition(0);
@@ -267,9 +229,11 @@ void loop() {
   // LED blinken lassen
   if (millis() - MillisLED >= IntervalLED) {
     MillisLED = millis();
-    if (map(Sperrgrad, Schrittzahl0Prozent, Schrittzahl100Prozent, 0, 100) > 50) {
-      if (digitalRead(IO_LED_Sperrgrad)) digitalWrite(IO_LED_Sperrgrad, LOW);
-      else digitalWrite(IO_LED_Sperrgrad, HIGH);
+    if (map(Sperrgrad, Schrittzahl0Prozent, Schrittzahl100Prozent, 0, 100) >= 60) {
+      if (digitalRead(IO_LED_Sperrgrad))
+        digitalWrite(IO_LED_Sperrgrad, LOW);
+      else
+        digitalWrite(IO_LED_Sperrgrad, HIGH);
     } else {
       digitalWrite(IO_LED_Sperrgrad, LOW);
     }
@@ -281,7 +245,6 @@ void loop() {
     digitalWrite(IO_Enable, HIGH);
     // Sofern der Zustand gewechselt hat, Position des Steppers zurücksetzen
     if (!ZustandBearbeitet) {
-      DEBUG_PRINTLN(F("Stepper zurücksetzen"));
       ZustandBearbeitet = true;
       stepper.setCurrentPosition(0);
     }
@@ -291,7 +254,6 @@ void loop() {
     digitalWrite(IO_Pumpe, LOW);
     // Sofern der Zustand gewechselt hat, Position des Steppers zurücksetzen
     if (!ZustandBearbeitet) {
-      DEBUG_PRINTLN(F("Stepper zurücksetzen"));
       ZustandBearbeitet = true;
       stepper.setCurrentPosition(0);
       stepper.setSpeed(1000);
@@ -299,7 +261,7 @@ void loop() {
   }
   // Kein Abschaltgrund liegt vor
   // Stepper aktivieren, Vorladepumpe einschalten
-  else if (!ZustandBremse && !ZustandHandbremse && !ZustandHauptschalter && !ZustandTemperatur) {
+  else if (!ZustandBremse && !ZustandHandbremse && !ZustandHauptschalter && !ZustandTemperatur && !TMCFehler) {
     digitalWrite(IO_Enable, LOW);
     digitalWrite(IO_Pumpe, HIGH);
     stepper.moveTo(SperrgradKompensiert);
@@ -308,7 +270,6 @@ void loop() {
 
     // Sofern der Zustand gewechselt hat, Stepper aktivieren und zur alten Position fahren
     if (!ZustandBearbeitet) {
-      DEBUG_PRINTLN(F("Stepper aktivieren"));
       stepper.setCurrentPosition(0);
       stepper.setSpeed(1000);
       ZustandBearbeitet = true;
@@ -320,29 +281,33 @@ void loop() {
     }
   }
 
-  // Fehlerstatus abfragen
-  // Wenn der Diagnosepin der Pumpe Low ist, während die Pumpe angesteuert wird, gibt es einen Kurzschluss
-  if (!digitalRead(IO_Diagnose_Pumpe) && digitalRead(IO_Pumpe)) {
-    PumpeFehler = true;
-    // Pumpe und Stepper abschalten
-    DEBUG_PRINTLN(F("Fehler an Vorladepumpe"));
-    digitalWrite(IO_Enable, HIGH);
-    digitalWrite(IO_Pumpe, LOW);
-    u8g2.firstPage();
-    do {
-      u8g2.setCursor(0, 15);
-      u8g2.print(F("Kurzschluss Vorladepumpe"));
-
-    } while (u8g2.nextPage());
-  } else {
-    PumpeFehler = false;
-  }
-
   // Fehler im Treiber des Schrittmotors
   if (TMCFehler) {
     // Pumpe und Stepper abschalten
     digitalWrite(IO_Enable, HIGH);
     digitalWrite(IO_Pumpe, LOW);
+  }
+
+  // Fehlerstatus abfragen
+  // Wenn der Diagnosepin der Pumpe Low ist, während die Pumpe angesteuert wird, gibt es einen Kurzschluss
+  if (!digitalRead(IO_Diagnose_Pumpe) && digitalRead(IO_Pumpe)) {
+    PumpeFehler = true;
+    // Pumpe und Stepper abschalten
+    digitalWrite(IO_Enable, HIGH);
+    digitalWrite(IO_Pumpe, LOW);
+    u8g2.firstPage();
+    do {
+
+      u8g2.setFont(u8g2_font_helvB14_tr);
+      u8g2.setCursor(0, 15);
+      u8g2.print(F("Fehler!"));
+      u8g2.setCursor(0, 25);
+      u8g2.setFont(u8g2_font_helvR08_tf);
+      u8g2.print(F("Vorladepumpe"));
+
+    } while (u8g2.nextPage());
+  } else {
+    PumpeFehler = false;
   }
 
 
@@ -362,19 +327,35 @@ void loop() {
 
 void SchreibeDisplay() {
   if (!PumpeFehler && !TMCFehler) {
+    int BreiteBox = map(Sperrgrad, Schrittzahl0Prozent, Schrittzahl100Prozent, 0, 118);
     u8g2.firstPage();
     do {
+      u8g2.drawHLine(0, 0, 128);
       u8g2.setFont(u8g2_font_helvR08_tf);
-      u8g2.setCursor(0, 12);
-      u8g2.print(F("Haldex Controller"));
-      u8g2.drawHLine(0, 12, 128);
+      u8g2.setCursor(5, 11);
+      u8g2.print(F("HALDEX"));
 
-      u8g2.setCursor(0, 35);
+      u8g2.drawFrame(5, 15, 118, 15);
+      u8g2.drawLine(75, 15, 75, 16);
+      u8g2.drawLine(75, 19, 75, 20);
+      u8g2.drawLine(75, 23, 75, 24);
+      u8g2.drawLine(75, 27, 75, 28);
+
+      u8g2.setCursor(5, 47);
 
       if (!ZustandBremse && !ZustandHandbremse && !ZustandHauptschalter && !ZustandTemperatur) {
 
-        u8g2.print(F("Sperrgrad "));
-        u8g2.setFont(u8g2_font_helvB18_tr);
+        u8g2.drawBox(5, 15, BreiteBox, 15);
+        if (BreiteBox >= 71) {
+          u8g2.setDrawColor(0);
+          u8g2.drawLine(75, 15, 75, 16);
+          u8g2.drawLine(75, 19, 75, 20);
+          u8g2.drawLine(75, 23, 75, 24);
+          u8g2.drawLine(75, 27, 75, 28);
+          u8g2.setDrawColor(1);
+        }
+
+        u8g2.setFont(u8g2_font_helvB14_tr);
         u8g2.print(map(Sperrgrad, Schrittzahl0Prozent, Schrittzahl100Prozent, 0, 100));
         u8g2.setFont(u8g2_font_helvR08_tf);
         u8g2.print(F(" %"));
@@ -398,16 +379,16 @@ void SchreibeDisplay() {
         }
       }
 
+      u8g2.drawHLine(0, 49, 128);
       u8g2.setFont(u8g2_font_helvR08_tf);
-      u8g2.setCursor(0, 60);
+      u8g2.setCursor(5, 61);
       u8g2.write(0xD6);
-      u8g2.print(F("ltemp. "));
-      u8g2.setFont(u8g2_font_helvB18_tr);
+      u8g2.print(F("ltemperatur "));
       u8g2.print(Temperatur, 0);
-      u8g2.setFont(u8g2_font_helvR08_tf);
       u8g2.print(F(" "));
       u8g2.write(0xB0);
       u8g2.print(F("C"));
+      u8g2.drawHLine(0, 63, 128);
 
     } while (u8g2.nextPage());
   }
@@ -424,109 +405,70 @@ void LeseEingaenge() {
 
   // Sobald das Öl 100°C überschreitet, wird das Ventil jedoch geöffnet
   if (Temperatur > 100 && ZustandTemperatur == false) {
-    DEBUG_PRINTLN(F("Übertemperatur"));
     ZustandTemperatur = true;
     ZustandBearbeitet = false;
   } else if (Temperatur <= 95 && ZustandTemperatur == true) {
     ZustandTemperatur = false;
   }
-  LeseTMCStatus();
+
+  LeseTMCStatus(false);
 }
 
-void LeseTMCStatus() {
+void LeseTMCStatus(bool PruefeOpenLoad) {
   TMCStatus = stepper_driver.getStatus();
-  if (TMCStatus.over_temperature_warning == 1) {
-    TMCFehler = true;
-    DEBUG_PRINTLN(F("Vorwarnung Übertemperatur"));
-    u8g2.firstPage();
-    do {
-      u8g2.setCursor(0, 15);
-      u8g2.print(F("Vorwarnung Übertemperatur"));
-
-    } while (u8g2.nextPage());
-  }
 
   if (TMCStatus.over_temperature_shutdown == 1) {
     TMCFehler = true;
-    DEBUG_PRINTLN(F("Warnung Übertemperatur"));
     u8g2.firstPage();
     do {
-      u8g2.setCursor(0, 25);
+      u8g2.setFont(u8g2_font_helvB14_tr);
+      u8g2.setCursor(0, 15);
+      u8g2.print(F("Fehler!"));
+      u8g2.setCursor(0, 40);
+      u8g2.setFont(u8g2_font_helvR08_tf);
       u8g2.print(F("Übertemperatur"));
-
+      u8g2.setCursor(0, 50);
+      u8g2.print(F("Motortreiber"));
     } while (u8g2.nextPage());
   }
 
-  if (TMCStatus.short_to_ground_a == 1) {
+  if (TMCStatus.short_to_ground_a == 1 || TMCStatus.short_to_ground_b == 1) {
     TMCFehler = true;
-    DEBUG_PRINTLN(F("A Kurzschluss nach Masse"));
     u8g2.firstPage();
     do {
+      u8g2.setFont(u8g2_font_helvB14_tr);
       u8g2.setCursor(0, 15);
-      u8g2.print(F("A Kurzschluss nach Masse"));
-
+      u8g2.print(F("Fehler!"));
+      u8g2.setCursor(0, 40);
+      u8g2.setFont(u8g2_font_helvR08_tf);
+      u8g2.print(F("Kurzschluss nach Masse"));
     } while (u8g2.nextPage());
   }
 
-  if (TMCStatus.short_to_ground_b == 1) {
+  if (TMCStatus.low_side_short_a == 1 || TMCStatus.low_side_short_b == 1) {
     TMCFehler = true;
-    DEBUG_PRINTLN(F("B Kurzschluss nach Masse"));
     u8g2.firstPage();
     do {
-      u8g2.setCursor(0, 25);
-      u8g2.print(F("B Kurzschluss nach Masse"));
-
-    } while (u8g2.nextPage());
-  }
-
-  if (TMCStatus.low_side_short_a == 1) {
-    TMCFehler = true;
-    DEBUG_PRINTLN(F("A Kurzschluss"));
-    u8g2.firstPage();
-    do {
+      u8g2.setFont(u8g2_font_helvB14_tr);
       u8g2.setCursor(0, 15);
-      u8g2.print(F("A Kurzschluss"));
-
+      u8g2.print(F("Fehler!"));
+      u8g2.setCursor(0, 40);
+      u8g2.setFont(u8g2_font_helvR08_tf);
+      u8g2.print(F("Kurzschluss Stepper"));
     } while (u8g2.nextPage());
   }
-
-  if (TMCStatus.low_side_short_b == 1) {
+  if ((TMCStatus.open_load_a == 1 || TMCStatus.open_load_b == 1) && PruefeOpenLoad) {
     TMCFehler = true;
-    DEBUG_PRINTLN(F("B Kurzschluss"));
     u8g2.firstPage();
     do {
-      u8g2.setCursor(0, 25);
-      u8g2.print(F("B Kurzschluss"));
-
+      u8g2.setFont(u8g2_font_helvB14_tr);
+      u8g2.setCursor(0, 15);
+      u8g2.print(F("Fehler!"));
+      u8g2.setCursor(0, 40);
+      u8g2.setFont(u8g2_font_helvR08_tf);
+      u8g2.print(F("Unterbrechung Stepper"));
     } while (u8g2.nextPage());
   }
-  /*
-      if (TMCStatus.open_load_a == 1)
-      {
-          TMCFehler = true;
-          DEBUG_PRINTLN(F("A Unterbrechung"));
-          u8g2.firstPage();
-          do
-          {
-              u8g2.setCursor(0, 15);
-              u8g2.print(F("A Unterbrechung"));
-
-          } while (u8g2.nextPage());
-      }
-
-      if (TMCStatus.open_load_b == 1)
-      {
-          TMCFehler = true;
-          DEBUG_PRINTLN(F("B Unterbrechung"));
-          u8g2.firstPage();
-          do
-          {
-              u8g2.setCursor(0, 25);
-              u8g2.print(F("B Unterbrechung"));
-
-          } while (u8g2.nextPage());
-      }
-      */
 }
 
 void BerechneTemperatur(int temp) {
@@ -566,7 +508,6 @@ int autoHome(int pos) {
     // Wenn der Rückgabewert des Stallguards höher als die Schwelle ist, blockiert der Motor
     if ((stall_guard_result < (STALL_GUARD_THRESHOLD * 2))) {
       // Ermittelten Wert nach oben geben
-      DEBUG_PRINTLN(stepper.currentPosition());
       return stepper.currentPosition();
     }
   }
