@@ -7,7 +7,6 @@
 // Hardware Pins
 // Eingänge:
 #define IO_Temperatur A0
-#define IO_Eingabe_Poti A1
 #define IO_Eingabe_25 A1
 #define IO_Eingabe_50 2
 #define IO_Eingabe_75 3
@@ -132,7 +131,10 @@ void setup() {
   pinMode(IO_Enable, OUTPUT);
   pinMode(IO_Step, OUTPUT);
   pinMode(IO_Direction, OUTPUT);
-  pinMode(IO_Eingabe_Poti, INPUT);
+  pinmode(IO_Eingabe_25, INPUT_PULLUP);
+  pinmode(IO_Eingabe_50, INPUT_PULLUP);
+  pinmode(IO_Eingabe_75, INPUT_PULLUP);
+  pinmode(IO_Eingabe_100, INPUT_PULLUP);
   pinMode(IO_Temperatur, INPUT);
   pinMode(IO_Bremse, INPUT);
   pinMode(IO_Handbremse, INPUT_PULLUP);
@@ -397,7 +399,23 @@ void SchreibeDisplay() {
 void LeseEingaenge() {
   // Lese Eingaenge
   BerechneTemperatur(analogRead(IO_Temperatur));
-  Sperrgrad = BerechneSperrgradPoti(analogRead(IO_Eingabe_Poti));
+  
+   if(!digitalRead(IO_Eingabe_25)) 
+  {
+    Sperrgrad = BerechneSperrgrad(25);
+  }
+  else if (!digitalRead(IO_Eingabe_50))
+  {
+    Sperrgrad = BerechneSperrgrad(50);
+  }
+  else if (!digitalRead(IO_Eingabe_75))
+  {
+    Sperrgrad = BerechneSperrgrad(75);
+  }
+  else if (!digitalRead(IO_Eingabe_100))
+  {
+    Sperrgrad = BerechneSperrgrad(100);
+  }
 
   // Anpassung des Sperrgrades über die Öltemperatur:
   // Bei wärmer werdendem Öl, wird das Ventil weiter geschlossen
@@ -479,8 +497,9 @@ void BerechneTemperatur(int temp) {
   Temperatur = Temperatur - 273.15;
 }
 
-int BerechneSperrgradPoti(int poti) {
-  float SperrgradRAW = map(poti, 0, 1020, 0, 100);
+
+
+int BerechneSperrgrad(int poti) {
   SperrgradRAW = SperrgradRAW / 100;
   float SperrgradRAWKorrigiert = 0.9 * (SperrgradRAW * SperrgradRAW * SperrgradRAW) - 1.3 * (SperrgradRAW * SperrgradRAW) + 1.35 * SperrgradRAW + 0.03;
   SperrgradRAWKorrigiert = SperrgradRAWKorrigiert * 100;
