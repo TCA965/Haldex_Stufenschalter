@@ -1,5 +1,0 @@
-{
-    "sketch": "Haldex.ino",
-    "configuration": "bootloader=uart0,eeprom=keep,variant=modelPB,BOD=2v7,LTO=Os,clock=16MHz_external",
-    "board": "MiniCore:avr:328"
-}
